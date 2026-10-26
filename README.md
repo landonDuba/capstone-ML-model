@@ -46,10 +46,12 @@ prediction, then a simple inspectable decision layer.
    `python` for the install and run commands.
 
    The script prints a per-play summary and saves `reports/decisions.csv` (easy
-   to open in your IDE or spreadsheet app) plus the full typed reports in
-   `reports/decisions.jsonl`. Use another `--game-id` from the game list to
-   inspect a different game. Expand training to more weeks with `--weeks 1 2 3`
-   and increase `--max-games` to use more games.
+   to open in your IDE or spreadsheet app), full typed reports in
+   `reports/decisions.jsonl`, replay-like rows in `reports/suggested_plays.csv`,
+   and structured play objects in `reports/suggested_plays.jsonl`.
+   Use another `--game-id` from the game list to inspect a different game.
+   Expand training to more weeks with `--weeks 1 2 3` and increase `--max-games`
+   to use more games.
 
 ## What the prototype says
 
@@ -90,8 +92,38 @@ have thrown elsewhere” answer.
 
 ## Files
 
+`suggested_plays.csv` includes the recorded model input rows and the future
+predicted player coordinates for the play, plus `play_start_frame_id`, event
+rows (`ball_snap`, `pass_forward`, `pass_arrived`), a recommended target, and a
+reason for the recommendation. The dataset contains no measured ball path or
+event timestamps: ball coordinates are a straight-line simulation,
+`pass_arrived` is simulated, and snap/forward markers are inferred. The
+`data_origin` column distinguishes recorded values from generated ones. Other
+tracking fields are carried from the last observed player state, except speed,
+acceleration, and movement direction, which are derived from predicted
+coordinates. This is replay-like output, not a physically validated
+counterfactual simulation.
+
+For Python integrations, call `build_suggested_play_payload` with the data
+already loaded and predicted. It returns one dictionary with the play's
+recommendation and frame-by-frame player, ball, and event data:
+
+```python
+from pathlib import Path
+from decision_engine import train, decisions, build_suggested_play_payload
+
+inputs, state, _, predictions, *_ = train(Path("data"), [1], 4, Path("models"))
+reports = decisions(state, predictions, Path("data"))
+play = build_suggested_play_payload(inputs, predictions, reports, game_id=2023091002, play_id=101)
+```
+
+The JSONL export contains one such object per line. Unity can read those lines
+with its JSON parser; a Unity app cannot call a Python function directly, so a
+live integration would need to run this Python pipeline as a service or load
+the generated JSONL file.
+
 - `decision_engine.py` — load a few games, fit two coordinate regressors, emit
-  typed per-play suggestions.
+  typed per-play suggestions and replay-like suggested play trajectories.
 - `requirements.txt` — minimal Python dependencies.
 - `data/`, `models/`, and `reports/` — local Kaggle data and generated outputs;
   these are excluded from version control.
